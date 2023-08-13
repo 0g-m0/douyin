@@ -21,5 +21,8 @@ func main() {
 		v1.SetupRoutes(v1Group)
 	}
 
-	router.Run(":8080")
+	err := router.Run(":8080")
+	if err != nil {
+		return 
+	}
 }
