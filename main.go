@@ -25,4 +25,7 @@ func main() {
 	if err != nil {
 		return 
 	}
+
+	// router.Run(":8080")
+	// Do something
 }
