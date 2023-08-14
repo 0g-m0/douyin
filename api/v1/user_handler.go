@@ -28,7 +28,7 @@ type UserRegisterResponse struct {
 }
 
 // UserRegisterHandler 处理用户注册请求
-func UserRegisterHandler(c *gin.Context) {
+func UserRegisterHandler_origin(c *gin.Context) {
 	var request UserRegisterRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -44,6 +44,50 @@ func UserRegisterHandler(c *gin.Context) {
 	// 创建用户数据模型
 	user := models.User{
 		Username: request.Username,
+		Password: hashPassword,
+	}
+
+	// 保存用户数据到数据库
+	if err := database.DB.Table("user").Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户注册失败"})
+		return
+	}
+
+	// 模拟生成用户 ID 和 Token
+	token := generateJWTToken(user.ID)
+
+	response := UserRegisterResponse{
+		StatusCode: 0, // 成功状态码
+		StatusMsg:  "注册成功",
+		UserID:     user.ID,
+		Token:      token,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func UserRegisterHandler(c *gin.Context) {
+	// codes below has confliction with the apk provided by BD,
+	// and this will incur a 400 code.
+	
+	// var request UserRegisterRequest
+	// if err := c.ShouldBindJSON(&request); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// 	return
+	// }
+
+	username := c.Query("username")
+	password := c.Query("password")
+
+	hashPassword, err := hashPassword(password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+		return
+	}
+
+	// 创建用户数据模型
+	user := models.User{
+		Username: username,
 		Password: hashPassword,
 	}
 
