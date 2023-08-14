@@ -67,9 +67,9 @@ func UserRegisterHandler_origin(c *gin.Context) {
 }
 
 func UserRegisterHandler(c *gin.Context) {
-	// codes below has confliction with the apk provided by BD,
+	// codes below seems incompatible with the apk provided by BD,
 	// and this will incur a 400 code.
-	
+
 	// var request UserRegisterRequest
 	// if err := c.ShouldBindJSON(&request); err != nil {
 	// 	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
