@@ -13,7 +13,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		requestPath := c.Request.URL.Path
 
 		// 如果是登录或注册接口，则跳过验证
-		if requestPath == "/douyin/user/register" || requestPath == "/douyin/user/login" {
+		if requestPath == "/douyin/user/register/" || requestPath == "/douyin/user/login" {
 			c.Next()
 			return
 		}
