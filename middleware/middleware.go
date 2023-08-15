@@ -5,6 +5,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"fmt"
 )
 
 func JWTMiddleware() gin.HandlerFunc {
@@ -20,7 +21,7 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// 获取请求体中的Token
 		var requestData map[string]interface{}
-		if err := c.ShouldBindJSON(&requestData); err != nil {
+		if err := c.ShouldBind(&requestData); err != nil {
 			// 处理请求体解析错误
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 			c.Abort()
@@ -28,11 +29,19 @@ func JWTMiddleware() gin.HandlerFunc {
 		}
 
 		tokenValue, ok := requestData["token"].(string)
-		if !ok || tokenValue == "" {
+		tokenValue2:=c.PostForm("token") 
+		
+		if  !ok || tokenValue == "" {
 			// 处理没有 token 的情况
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-			c.Abort()
-			return
+			if tokenValue2 == ""  {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+				fmt.Println(tokenValue)
+				c.Abort()
+				return
+
+			}
+			tokenValue = tokenValue2
+			
 		}
 
 		token, err := jwt.Parse(tokenValue, func(token *jwt.Token) (interface{}, error) {
