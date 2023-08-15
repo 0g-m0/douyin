@@ -11,4 +11,9 @@ func SetupRoutes(router *gin.RouterGroup) {
 
 		// 在这里添加对应的路由
 	}
+
+	pubGroup := router.Group("/publish")
+	{
+		pubGroup.POST("/action/", UserPublishHandler)
+	}
 }
