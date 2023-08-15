@@ -10,6 +10,7 @@ type AppConfig struct {
 	DBUser       string
 	DBPassword   string
 	JWTSecretKey string
+	SrcSavedPath string
 	// Add more configuration fields here
 }
 
@@ -24,6 +25,8 @@ func LoadConfig() {
 		DBUser:       getEnv("DB_USER", "root"),
 		DBPassword:   getEnv("DB_PASSWORD", "root"),
 		JWTSecretKey: getEnv("JWT_SECREST_KEY", "douyin"),
+		//vidoes and img will be saved under ${srcSavedPath}
+		SrcSavedPath: getEnv("SRC_SAVED_PATH", ""),
 	}
 }
 
