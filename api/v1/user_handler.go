@@ -13,12 +13,6 @@ import (
 	"time"
 )
 
-// UserRegisterRequest 是用户注册请求的结构体
-type UserRegisterRequest struct {
-	Username string `form:"username" binding:"required,max=32"`
-	Password string `form:"password" binding:"required,max=32"`
-}
-
 // UserRegisterResponse 是用户注册响应的结构体
 type UserRegisterResponse struct {
 	StatusCode int32  `json:"status_code"`
@@ -27,15 +21,30 @@ type UserRegisterResponse struct {
 	Token      string `json:"token"`
 }
 
+// UserLoginResponse 是用户登录响应的结构体
+type UserLoginResponse struct {
+	StatusCode int32  `json:"status_code"`
+	StatusMsg  string `json:"status_msg"`
+	UserID     int64  `json:"user_id"`
+	Token      string `json:"token"`
+}
+
+// GetUserProfileResponse 是获取用户信息响应的结构体
+type GetUserProfileResponse struct {
+	StatusCode int32       `json:"status_code"`
+	StatusMsg  string      `json:"status_msg"`
+	User       models.User `json:"user"`
+}
+
 // UserRegisterHandler 处理用户注册请求
 func UserRegisterHandler(c *gin.Context) {
-	var request UserRegisterRequest
-	if err := c.ShouldBind(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+	username := c.Query("username")
+	password := c.Query("password")
 
-	hashPassword, err := hashPassword(request.Password)
+	fmt.Println(username)
+	fmt.Println(password)
+
+	hashPassword, err := hashPassword(password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
 		return
@@ -43,9 +52,22 @@ func UserRegisterHandler(c *gin.Context) {
 
 	// 创建用户数据模型
 	user := models.User{
-		Username: request.Username,
+		Username: username,
 		Password: hashPassword,
 	}
+	fmt.Println(1)
+
+	// 验证用户名是否已经存在
+	if err := database.DB.Table("user").Where("name = ?", user.Username).First(&user).Error; err == nil {
+		fmt.Println()
+		c.JSON(http.StatusOK, UserLoginResponse{
+			StatusCode: 1,
+			StatusMsg:  "用户名已经存在",
+		})
+		return
+	}
+
+	fmt.Println(2)
 
 	// 保存用户数据到数据库
 	if err := database.DB.Table("user").Create(&user).Error; err != nil {
@@ -53,7 +75,9 @@ func UserRegisterHandler(c *gin.Context) {
 		return
 	}
 
-	// 模拟生成用户 ID 和 Token
+	fmt.Println(3)
+
+	// 生成Token
 	token := generateJWTToken(user.ID)
 
 	response := UserRegisterResponse{
@@ -93,7 +117,89 @@ func generateJWTToken(userID int64) string {
 	return tokenString
 }
 
+// UserLoginHandler 处理用户登录请求
 func UserLoginHandler(c *gin.Context) {
-	// 用于获取用户id
-	fmt.Println(c.Get("user_id"))
+	username := c.Query("username")
+	password := c.Query("password")
+
+	// 进行用户登录验证，比对用户名和密码是否正确
+	user, err := getUserByUsername(username)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码不正确"})
+		return
+	}
+
+	// 验证密码是否正确
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码不正确"})
+		return
+	}
+
+	// 生成 JWT Token
+	token := generateJWTToken(user.ID)
+
+	response := UserLoginResponse{
+		StatusCode: 0,
+		StatusMsg:  "登录成功",
+		UserID:     user.ID,
+		Token:      token,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// 根据用户名查询用户信息
+func getUserByUsername(username string) (models.User, error) {
+	var user models.User
+	if err := database.DB.Table("user").Where("name = ?", username).First(&user).Error; err != nil {
+		return models.User{}, err
+	}
+	return user, nil
+}
+
+// UserInfoHandler 处理用户信息请求
+func UserInfoHandler(c *gin.Context) {
+	userID := c.Query("user_id")
+	token := c.Query("token")
+
+	fmt.Println(userID)
+
+	// 验证token是否有效
+	if err := validateToken(userID, token); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的Token"})
+		return
+	}
+
+	// 查询用户信息
+	var user models.User
+	if err := database.DB.Table("user").Where("id = ?", userID).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	// 构建响应
+	response := GetUserProfileResponse{
+		StatusCode: 0, // 成功状态码
+		StatusMsg:  "获取用户信息成功",
+		User:       user,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func validateToken(userID string, token string) error {
+	// 验证Token是否有效
+	tokenClaims, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.AppConfigInstance.JWTSecretKey), nil
+	})
+	if err != nil || !tokenClaims.Valid {
+		return err
+	}
+
+	// 验证Token中的用户ID是否与请求的用户ID一致
+	claims, _ := tokenClaims.Claims.(jwt.MapClaims)
+	if claims["user_id"] != userID {
+		return err
+	}
+
+	return nil
 }

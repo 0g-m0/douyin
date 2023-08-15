@@ -4,12 +4,11 @@ package v1
 import "github.com/gin-gonic/gin"
 
 func SetupRoutes(router *gin.RouterGroup) {
-	authGroup := router.Group("/user")
+	userGroup := router.Group("/user")
 	{
-		authGroup.POST("/register/", UserRegisterHandler)
-		authGroup.POST("/login", UserLoginHandler)
-
-		// 在这里添加对应的路由
+		userGroup.POST("/register/", UserRegisterHandler)
+		userGroup.POST("/login/", UserLoginHandler)
+		userGroup.GET("/", UserInfoHandler)
 	}
 
 	pubGroup := router.Group("/publish")

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"douyin/config"
+	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -13,8 +14,10 @@ func JWTMiddleware() gin.HandlerFunc {
 		// 获取请求的路径
 		requestPath := c.Request.URL.Path
 
+		fmt.Println(requestPath)
+
 		// 如果是登录或注册接口，则跳过验证
-		if requestPath == "/douyin/user/register/" || requestPath == "/douyin/user/login" {
+		if requestPath == "/douyin/user/register/" || requestPath == "/douyin/user/login/" {
 			c.Next()
 			return
 		}
@@ -43,6 +46,8 @@ func JWTMiddleware() gin.HandlerFunc {
 			tokenValue = tokenValue2
 			
 		}
+
+		fmt.Println(tokenValue)
 
 		token, err := jwt.Parse(tokenValue, func(token *jwt.Token) (interface{}, error) {
 			return []byte(config.AppConfigInstance.JWTSecretKey), nil
