@@ -10,8 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"sync"
 	"time"
 )
+
+// UserRegisterRequest 是用户注册请求的结构体
+type UserRegisterRequest struct {
+	Username string `form:"username" binding:"required"`
+	Password string `form:"password" binding:"required"`
+}
+
+// UserLoginRequest 是用户登录请求的结构体
+type UserLoginRequest struct {
+	Username string `form:"username" binding:"required"`
+	Password string `form:"password" binding:"required"`
+}
+
+// UserProfileRequest 是获取用户信息请求的结构体
+type UserProfileRequest struct {
+	UserID int64  `form:"user_id" binding:"required"`
+	Token  string `form:"token" binding:"required"`
+}
 
 // UserRegisterResponse 是用户注册响应的结构体
 type UserRegisterResponse struct {
@@ -30,21 +49,25 @@ type UserLoginResponse struct {
 }
 
 // GetUserProfileResponse 是获取用户信息响应的结构体
-type GetUserProfileResponse struct {
+type UserProfileResponse struct {
 	StatusCode int32       `json:"status_code"`
 	StatusMsg  string      `json:"status_msg"`
 	User       models.User `json:"user"`
 }
 
+// 在全局范围内定义一个互斥锁
+var userMutex sync.Mutex
+
 // UserRegisterHandler 处理用户注册请求
 func UserRegisterHandler(c *gin.Context) {
-	username := c.Query("username")
-	password := c.Query("password")
+	// 获取请求参数
+	var request UserRegisterRequest
+	if err := c.ShouldBind(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
 
-	fmt.Println(username)
-	fmt.Println(password)
-
-	hashPassword, err := hashPassword(password)
+	hashPassword, err := hashPassword(request.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
 		return
@@ -52,10 +75,13 @@ func UserRegisterHandler(c *gin.Context) {
 
 	// 创建用户数据模型
 	user := models.User{
-		Username: username,
+		Username: request.Username,
 		Password: hashPassword,
 	}
-	fmt.Println(1)
+
+	// 使用互斥锁确保只有一个线程可以访问关键代码
+	userMutex.Lock()
+	defer userMutex.Unlock()
 
 	// 验证用户名是否已经存在
 	if err := database.DB.Table("user").Where("name = ?", user.Username).First(&user).Error; err == nil {
@@ -66,8 +92,6 @@ func UserRegisterHandler(c *gin.Context) {
 		})
 		return
 	}
-
-	fmt.Println(2)
 
 	// 保存用户数据到数据库
 	if err := database.DB.Table("user").Create(&user).Error; err != nil {
@@ -119,18 +143,22 @@ func generateJWTToken(userID int64) string {
 
 // UserLoginHandler 处理用户登录请求
 func UserLoginHandler(c *gin.Context) {
-	username := c.Query("username")
-	password := c.Query("password")
+	// 获取请求参数
+	var request UserLoginRequest
+	if err := c.ShouldBind(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
 
 	// 进行用户登录验证，比对用户名和密码是否正确
-	user, err := getUserByUsername(username)
+	user, err := getUserByUsername(request.Username)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码不正确"})
 		return
 	}
 
 	// 验证密码是否正确
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(request.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码不正确"})
 		return
 	}
@@ -159,25 +187,27 @@ func getUserByUsername(username string) (models.User, error) {
 
 // UserInfoHandler 处理用户信息请求
 func UserInfoHandler(c *gin.Context) {
-	userID := c.Query("user_id")
-	token := c.Query("token")
-
-	fmt.Println(userID)
+	// 获取请求参数
+	var request UserProfileRequest
+	if err := c.ShouldBind(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
 
 	// 验证token是否有效
-	if err := validateToken(userID, token); err != nil {
+	if err := validateToken(request.UserID, request.Token); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的Token"})
 		return
 	}
 
 	// 查询用户信息
 	var user models.User
-	if err := database.DB.Table("user").Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := database.DB.Table("user").Where("id = ?", request.UserID).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
 	// 构建响应
-	response := GetUserProfileResponse{
+	response := UserProfileResponse{
 		StatusCode: 0, // 成功状态码
 		StatusMsg:  "获取用户信息成功",
 		User:       user,
@@ -186,7 +216,7 @@ func UserInfoHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func validateToken(userID string, token string) error {
+func validateToken(userID int64, token string) error {
 	// 验证Token是否有效
 	tokenClaims, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.AppConfigInstance.JWTSecretKey), nil
