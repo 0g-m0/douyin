@@ -4,6 +4,7 @@ import (
 	"douyin/api/v1"
 	"douyin/config"
 	"douyin/database"
+	"douyin/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,7 +14,7 @@ func main() {
 
 	router := gin.Default()
 
-	//router.Use(middleware.JWTMiddleware())
+	router.Use(middleware.JWTMiddleware())
 
 	v1Group := router.Group("/douyin")
 	{

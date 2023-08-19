@@ -50,9 +50,9 @@ type UserLoginResponse struct {
 
 // GetUserProfileResponse 是获取用户信息响应的结构体
 type UserProfileResponse struct {
-	StatusCode int32       `json:"status_code"`
-	StatusMsg  string      `json:"status_msg"`
-	User       models.User `json:"user"`
+	StatusCode int32          `json:"status_code"`
+	StatusMsg  string         `json:"status_msg"`
+	UserDTO    models.UserDTO `json:"user"`
 }
 
 // 在全局范围内定义一个互斥锁
@@ -75,7 +75,7 @@ func UserRegisterHandler(c *gin.Context) {
 
 	// 创建用户数据模型
 	user := models.User{
-		Username: request.Username,
+		Name:     request.Username,
 		Password: hashPassword,
 	}
 
@@ -84,7 +84,7 @@ func UserRegisterHandler(c *gin.Context) {
 	defer userMutex.Unlock()
 
 	// 验证用户名是否已经存在
-	if err := database.DB.Table("user").Where("name = ?", user.Username).First(&user).Error; err == nil {
+	if err := database.DB.Table("user").Where("name = ?", user.Name).First(&user).Error; err == nil {
 		fmt.Println()
 		c.JSON(http.StatusOK, UserLoginResponse{
 			StatusCode: 1,
@@ -93,13 +93,22 @@ func UserRegisterHandler(c *gin.Context) {
 		return
 	}
 
+	// 设置用户默认头像
+	defaultAvatarURL := fmt.Sprintf("%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_avatar.png")
+	user.Avatar = defaultAvatarURL
+
+	// 设置用户默认背景图
+	defaultBackgroundImageURL := fmt.Sprintf("%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_background.jpg")
+	user.BackgroundImage = defaultBackgroundImageURL
+
+	// 设置用户默认签名
+	user.Signature = "这个人很懒，什么都没有留下"
+
 	// 保存用户数据到数据库
 	if err := database.DB.Table("user").Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户注册失败"})
 		return
 	}
-
-	fmt.Println(3)
 
 	// 生成Token
 	token := generateJWTToken(user.ID)
@@ -128,7 +137,7 @@ func generateJWTToken(userID int64) string {
 	// 创建一个新的Token对象
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Token 过期时间为一天
+		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Token 过期时间为 1 天
 	})
 
 	// 使用密钥对 Token 进行签名
@@ -194,42 +203,27 @@ func UserInfoHandler(c *gin.Context) {
 		return
 	}
 
-	// 验证token是否有效
-	if err := validateToken(request.UserID, request.Token); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的Token"})
+	// 验证user_id与token中的user_id是否一致
+	userIDValue, _ := c.Get("user_id")
+	userID, _ := userIDValue.(int64)
+	if userID != request.UserID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户ID与Token中的用户ID不一致"})
 		return
 	}
 
 	// 查询用户信息
-	var user models.User
-	if err := database.DB.Table("user").Where("id = ?", request.UserID).First(&user).Error; err != nil {
+	var userDTO models.UserDTO
+	if err := database.DB.Table("user").Where("id = ?", request.UserID).First(&userDTO).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+
 	// 构建响应
 	response := UserProfileResponse{
 		StatusCode: 0, // 成功状态码
 		StatusMsg:  "获取用户信息成功",
-		User:       user,
+		UserDTO:    userDTO,
 	}
 
 	c.JSON(http.StatusOK, response)
-}
-
-func validateToken(userID int64, token string) error {
-	// 验证Token是否有效
-	tokenClaims, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.AppConfigInstance.JWTSecretKey), nil
-	})
-	if err != nil || !tokenClaims.Valid {
-		return err
-	}
-
-	// 验证Token中的用户ID是否与请求的用户ID一致
-	claims, _ := tokenClaims.Claims.(jwt.MapClaims)
-	if claims["user_id"] != userID {
-		return err
-	}
-
-	return nil
 }
