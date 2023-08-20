@@ -3,7 +3,6 @@ package v1
 import (
 	// "douyin/config"
 	"douyin/database"
-	"fmt"
 	"douyin/database/models"
 	"log"
 	// "github.com/jinzhu/gorm"
@@ -13,7 +12,6 @@ import (
 	// "strconv"
 	"net/http"
 	"time"
-	// "mime/multipart"
 )
 
 type feedRequest struct {
@@ -77,7 +75,10 @@ func GetFeedHandler(c *gin.Context) {
 	for _, video := range videos {
 		video_ids = append(video_ids, video.VideoID)
 	}
-	fmt.Println(video_ids)
+	// fmt.Println(video_ids)
+
+	//新发布的先刷到，将vid倒叙排列
+	video_ids = reverseList(video_ids)
 	var Videos []Video_feedResp
 	for _,v_id := range video_ids {
 		Videos = append(Videos,Get_Video_for_feed(v_id,current_userID.(int64)))
@@ -95,29 +96,15 @@ func GetFeedHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
-    
-    // 处理获取文件成功的情况
-	userIDValue, _ := c.Get("user_id")
-	userId, _ := userIDValue.(int64)
-	title := c.PostForm("title")
-
-	fmt.Println(userId,title)
-
-	
- 
 
 }
 
 func Get_Video_for_feed(video_id int64,current_userID int64) Video_feedResp{
 	var video models.Video
-	fmt.Println("01")
 	result := database.DB.Table("video").Where("video_id = ?", video_id).Find(&video)
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
-
-	fmt.Println("1")
-
 	autherID := video.AuthorUserID
 	author_resp := Get_author_for_feed(autherID,current_userID)
 
@@ -184,4 +171,14 @@ func Get_author_for_feed(author_id int64,current_userID int64) Author_feedResp{
 	}
 
 	return author_resp
+}
+
+
+func reverseList(list []int64) []int64 {
+	length := len(list)
+	reversed := make([]int64, length)
+	for i, j := 0, length-1; i < length; i, j = i+1, j-1 {
+		reversed[j] = list[i]
+	}
+	return reversed
 }
