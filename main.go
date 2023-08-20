@@ -2,7 +2,7 @@ package main
 
 import (
 	v1 "douyin/api/v1"
-	"douyin/config"
+	//"douyin/config"
 	"douyin/database"
 	"douyin/middleware"
 
@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	config.LoadConfig()
+	//config.LoadConfig()
 	database.ConnectDB()
 	middleware.RedisMiddleware()
 	defer middleware.CloseRedis()
