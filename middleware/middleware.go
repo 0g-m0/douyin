@@ -25,6 +25,9 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// 获取请求体中的Token
 		tokenString := c.Query("token")
+		if tokenString == "" {
+			tokenString = c.PostForm("token") // 从 POST form-data 中获取 token
+		}
 
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供Token"})
