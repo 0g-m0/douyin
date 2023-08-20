@@ -20,6 +20,8 @@ func ConnectDB() error {
 	)
 
 	var err error
+	// DB, err = gorm.Open("mysql", "root:123456@tcp(127.0.0.1:3306)/douyin?charset=utf8&parseTime=true")
+
 	DB, err = gorm.Open("mysql", dbURL)
 	if err != nil {
 		panic("Failed to connect to the database")

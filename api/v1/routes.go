@@ -19,4 +19,10 @@ func SetupRoutes(router *gin.RouterGroup) {
 	{
 		pubGroup.POST("/action/", UserPublishHandler)
 	}
+
+	favoriteGroup := router.Group("/favorite")
+	{
+		favoriteGroup.POST("/action/", FavoriteAction)
+		favoriteGroup.GET("/list/", FavoriteList)
+	}
 }
