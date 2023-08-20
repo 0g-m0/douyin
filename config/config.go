@@ -24,7 +24,7 @@ var AppConfigInstance AppConfig
 
 func LoadConfig() {
 	// 初始化 Viper
-	viper.SetConfigFile("/Users/gaomin/GolandProjects/douyin/config/config.json") // 配置文件的路径
+	viper.SetConfigFile("./config/config.json") // 配置文件的路径
 
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {

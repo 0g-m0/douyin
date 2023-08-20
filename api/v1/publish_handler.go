@@ -6,7 +6,6 @@ import (
 	"douyin/database"
 	"douyin/database/models"
 	"log"
-	"io"
 	"os"
 	"fmt"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"net/http"
 	"time"
 	"mime/multipart"
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 //上传视频request结构体
 type VideoUploadRequest struct {
@@ -42,18 +42,19 @@ func UserPublishHandler(c *gin.Context) {
 	userId, _ := userIDValue.(int64)
 	title := c.PostForm("title")
 
-	savedPath,err :=saveVideo(file,userId)
+	filename,err :=saveVideo(file,userId)
 	if err != nil {
         // 上传视频失败
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
-	log.Printf("id:%v的用户上传了视频 %s\n", userId,savedPath)
+	log.Printf("id:%v的用户上传了视频 %s\n", userId,filename)
 
-
+	videoURL := fmt.Sprintf("https://%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "video/" + filename)
+	fmt.Println(videoURL)
 	video := models.Video{
 		AuthorUserID: userId,
-		PlayURL: savedPath,
+		PlayURL: videoURL,
 		Title: title,
 		CreatedAt: time.Now(),
 	}
@@ -83,25 +84,43 @@ func saveVideo(file *multipart.FileHeader,userid int64) (string,error) {
 	defer src.Close()
 
 	
-	app_save_directory,err:=getSavePath()
-	if err != nil {
-		fmt.Println("上传文件在服务端的保存路径获取失败，查看保存路径配置并确保拥有该路径读写权限")
-		return "",err
-	}
+	// app_save_directory,err:=getSavePath()
+	// if err != nil {
+	// 	fmt.Println("上传文件在服务端的保存路径获取失败，查看保存路径配置并确保拥有该路径读写权限")
+	// 	return "",err
+	// }
 	filename:=getUniqueFilename(file.Filename,userid)
-	dst, err := os.Create(app_save_directory + "/" + filename)
-	if err != nil {
-		fmt.Println("create file fail")
-		return "",err
-	}
-	defer dst.Close()
-	fmt.Println(file.Filename)
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		fmt.Println("upload file io copy fail")
-		return "",err
-	}
-	fmt.Println(filename)
+
+	client, err := oss.New(config.AppConfigInstance.AliyunOSSEndpoint, config.AppConfigInstance.AliyunOSSAccessKeyID, config.AppConfigInstance.AliyunOSSAccessKeySecret)
+    if err != nil {
+        panic(err)
+    }
+
+    // 获取存储桶对象
+    bucket, err := client.Bucket(config.AppConfigInstance.AliyunOSSBucketName)
+    if err != nil {
+        panic(err)
+    }
+
+
+    // 调用上传方法
+    err = bucket.PutObject("video/" + filename, src)
+    if err != nil {
+        panic(err)
+    }
+	// dst, err := os.Create(app_save_directory + "/" + filename)
+	// if err != nil {
+	// 	fmt.Println("create file fail")
+	// 	return "",err
+	// }
+	// defer dst.Close()
+	// fmt.Println(file.Filename)
+	// _, err = io.Copy(dst, src)
+	// if err != nil {
+	// 	fmt.Println("upload file io copy fail")
+	// 	return "",err
+	// }
+	// fmt.Println(filename)
 	return filename , nil
 }
 

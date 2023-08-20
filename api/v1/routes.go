@@ -4,6 +4,10 @@ package v1
 import "github.com/gin-gonic/gin"
 
 func SetupRoutes(router *gin.RouterGroup) {
+	feedGroup := router.Group("/feed")
+	{
+		feedGroup.GET("/", GetFeedHandler)
+	}
 	userGroup := router.Group("/user")
 	{
 		userGroup.POST("/register/", UserRegisterHandler)
