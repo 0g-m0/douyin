@@ -42,17 +42,17 @@ type Video_feedResp struct {
 //
 // User
 type Author_feedResp struct {
-	// Avatar          string `json:"avatar"`          // 用户头像
-	// BackgroundImage string `json:"background_image"`// 用户个人页顶部大图
-	// FavoriteCount   int64  `json:"favorite_count"`  // 喜欢数
-	// FollowCount     int64  `json:"follow_count"`    // 关注总数
-	// FollowerCount   int64  `json:"follower_count"`  // 粉丝总数
+	Avatar          string `json:"avatar"`          // 用户头像
+	BackgroundImage string `json:"background_image"`// 用户个人页顶部大图
+	FavoriteCount   int64  `json:"favorite_count"`  // 喜欢数
+	FollowCount     int64  `json:"follow_count"`    // 关注总数
+	FollowerCount   int64  `json:"follower_count"`  // 粉丝总数
 	ID              int64  `json:"id"`              // 用户id
 	IsFollow        bool   `json:"is_follow"`       // true-已关注，false-未关注
 	Name            string `json:"name"`            // 用户名称
-	// Signature       string `json:"signature"`       // 个人简介
-	// TotalFavorited  string `json:"total_favorited"` // 获赞数量
-	// WorkCount       int64  `json:"work_count"`      // 作品数
+	Signature       string `json:"signature"`       // 个人简介
+	TotalFavorited  int64 `json:"total_favorited"` // 获赞数量
+	WorkCount       int64  `json:"work_count"`      // 作品数
 }
 
 
@@ -68,7 +68,7 @@ func GetFeedHandler(c *gin.Context) {
 
 	var video_ids []int64
 	var videos []models.Video
-	result := database.DB.Table("video").Select("video_id").Find(&videos)
+	result := database.DB.Table("video").Select("id").Find(&videos)
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
@@ -101,7 +101,7 @@ func GetFeedHandler(c *gin.Context) {
 
 func Get_Video_for_feed(video_id int64,current_userID int64) Video_feedResp{
 	var video models.Video
-	result := database.DB.Table("video").Where("video_id = ?", video_id).Find(&video)
+	result := database.DB.Table("video").Where("id = ?", video_id).Find(&video)
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
@@ -163,11 +163,17 @@ func Get_author_for_feed(author_id int64,current_userID int64) Author_feedResp{
 	}
 
 	author_resp = Author_feedResp{
-		ID:            author_id,
-		Name:          author.Name,
-		// FollowCount:   0,
-		// FollowerCount: 0, 
-		IsFollow:      follow,
+		ID:                author_id,
+		Name:              author.Name, 
+		BackgroundImage:   author.BackgroundImage,// 用户个人页顶部大图
+		FavoriteCount:     author.FavoriteCount,  // 喜欢数
+		FollowCount:       author.FollowCount,    // 关注总数
+		FollowerCount:     author.FollowerCount,  // 粉丝总数
+		Signature:         author.Signature,       // 个人简介
+		TotalFavorited:    author.TotalFavorited, // 获赞数量
+		WorkCount:         author.WorkCount,      // 作品数
+		Avatar:            author.Avatar,
+		IsFollow:          follow,
 	}
 
 	return author_resp

@@ -27,6 +27,69 @@ type VideoUploadResponse struct {
 	StatusCode int    `json:"status_code"`
 	StatusMsg  string `json:"status_msg"`
 }
+//进入自己主页获取自己发布过的所有视频request结构体
+type MyVideoListRequest struct {
+	Token  string `json:"token"`  // 用户鉴权token
+	UserID string `json:"user_id"`// 用户id
+}
+
+//处理用户发布视频的请求/publish/action
+func PublishListHandler(c *gin.Context) {
+	// 获取请求参数
+	var request MyVideoListRequest
+	if err := c.ShouldBindQuery(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+	tokenUserIDValue, _ := c.Get("user_id")
+	req_uid := c.Query("user_id")
+	req_uid_int , err := strconv.ParseInt(req_uid, 10, 64)
+	if err != nil {
+		fmt.Println("转换失败：", err)
+		return
+	}
+	
+	if req_uid_int != tokenUserIDValue{
+		log.Printf("token记录的uid和req上传uid不一致")
+		fmt.Println("request.UserID:",req_uid_int)
+		fmt.Println("token uid: ",tokenUserIDValue)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "token记录的uid和req上传uid不一致"})
+		return
+	}
+
+
+	var video_ids []int64
+	var videos []models.Video
+	result := database.DB.Table("video").Where("author_user_id = ?", tokenUserIDValue).Select("id").Find(&videos)
+	if result.Error != nil {
+		log.Fatal(result.Error)
+	}
+	for _, video := range videos {
+		video_ids = append(video_ids, video.VideoID)
+	}
+	// fmt.Println(video_ids)
+
+	//新发布的先刷到，将vid倒叙排列
+	video_ids = reverseList(video_ids)
+	var Videos []Video_feedResp
+	for _,v_id := range video_ids {
+		Videos = append(Videos,Get_Video_for_feed(v_id,tokenUserIDValue.(int64)))
+	}
+
+	
+	
+	// timestamp := time.Now().Unix()
+	response := feedResponse{
+		StatusCode: 0, // 成功状态码	
+		// StatusMsg  : "feed get success" ,// 返回状态描述
+		VideoList  :Videos ,// 视频列表
+	}
+
+	c.JSON(http.StatusOK, response)
+
+
+
+}
 
 //处理用户发布视频的请求/publish/action
 func UserPublishHandler(c *gin.Context) {
@@ -50,11 +113,16 @@ func UserPublishHandler(c *gin.Context) {
     }
 	log.Printf("id:%v的用户上传了视频 %s\n", userId,filename)
 
+	coverURLsuffic :="?x-oss-process=video/snapshot,t_10,f_jpg,w_200,h_320,ar_auto"
+
 	videoURL := fmt.Sprintf("https://%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "video/" + filename)
+	coverURL := videoURL + coverURLsuffic
+	
 	fmt.Println(videoURL)
 	video := models.Video{
 		AuthorUserID: userId,
 		PlayURL: videoURL,
+		CoverURL: coverURL,
 		Title: title,
 		CreatedAt: time.Now(),
 	}
@@ -64,6 +132,21 @@ func UserPublishHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "视频存入数据库失败"})
 		return
 	}
+
+	//用户上传视频数+1
+	var user models.User
+	if err := database.DB.Table("user").Where("id = ?", userId).First(&user).Error; err != nil {
+		fmt.Println("更新上传数字时未找到用户:", err)
+		return
+	}
+
+	user.WorkCount += 1
+	if err := database.DB.Table("user").Save(&user).Error; err != nil {
+		fmt.Println("更新失败:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户上传视频数加一失败"})
+		return
+	}
+
 
 	response := VideoUploadResponse{
 		StatusCode: 0, // 成功状态码

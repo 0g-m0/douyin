@@ -94,11 +94,11 @@ func UserRegisterHandler(c *gin.Context) {
 	}
 
 	// 设置用户默认头像
-	defaultAvatarURL := fmt.Sprintf("%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_avatar.png")
+	defaultAvatarURL := fmt.Sprintf("https://%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_avatar.png")
 	user.Avatar = defaultAvatarURL
 
 	// 设置用户默认背景图
-	defaultBackgroundImageURL := fmt.Sprintf("%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_background.jpg")
+	defaultBackgroundImageURL := fmt.Sprintf("https://%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_background.jpg")
 	user.BackgroundImage = defaultBackgroundImageURL
 
 	// 设置用户默认签名

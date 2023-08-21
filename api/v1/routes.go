@@ -18,6 +18,8 @@ func SetupRoutes(router *gin.RouterGroup) {
 	pubGroup := router.Group("/publish")
 	{
 		pubGroup.POST("/action/", UserPublishHandler)
+		pubGroup.GET("/list/", PublishListHandler)
+		
 	}
 
 	favoriteGroup := router.Group("/favorite")
