@@ -10,7 +10,7 @@ type Video struct {
 	PlayURL      string     `gorm:"column:play_url;size:256"`
 	CoverURL     string     `gorm:"column:cover_url;size:256"`
 	Likes        int        `gorm:"column:likes;default:0"`
-	Comments     int        `gorm:"column:comment_counts;default:0"`
+	Comments     int        `gorm:"column:comment_count;default:0"`
 	Title        string     `gorm:"column:title;size:50"`
 	CreatedAt    time.Time  `gorm:"column:created_at;not null"`
 	UpdatedAt    *time.Time `gorm:"column:updated_at;autoUpdateTime"`
