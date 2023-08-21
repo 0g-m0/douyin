@@ -1,4 +1,3 @@
-// api/v1/routes.go
 package v1
 
 import "github.com/gin-gonic/gin"
@@ -19,7 +18,13 @@ func SetupRoutes(router *gin.RouterGroup) {
 	{
 		pubGroup.POST("/action/", UserPublishHandler)
 		pubGroup.GET("/list/", PublishListHandler)
-		
+
+	}
+
+	comGroup := router.Group("/comment")
+	{
+		comGroup.POST("/action/", CommentActionHandler)
+		comGroup.GET("/list/", CommentListHandler)
 	}
 
 	favoriteGroup := router.Group("/favorite")
