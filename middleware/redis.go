@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"douyin/database"
+	//"douyin/database/models"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gomodule/redigo/redis"
 )
@@ -29,13 +33,15 @@ func InitRedisPool() {
 			return c, err
 		},
 	}
+	RedisPool.Get().Do("flushdb")
 }
 
 func RedisMiddleware() gin.HandlerFunc {
 	InitRedisPool() // 初始化 Redis 连接池
 	if RedisPool != nil {
-		fmt.Println("get")
+		fmt.Println("Get Redis!")
 	}
+	LoadMysqlToRedis()
 	return func(ctx *gin.Context) {
 		ctx.Set("RedisPool", RedisPool) // 将连接池存入上下文
 		ctx.Next()
@@ -44,4 +50,57 @@ func RedisMiddleware() gin.HandlerFunc {
 
 func CloseRedis() {
 	RedisPool.Close()
+}
+
+type UserRedis struct {
+	ID             int64
+	TotalFavorited int64
+	FavoriteCount  int64
+}
+
+type VideoRedis struct {
+	ID           int64
+	AuthorUserID int64
+	Likes        int
+}
+
+type FavoriteRedis struct {
+	UserID  int64
+	VideoID int64
+}
+
+func LoadMysqlToRedis() {
+	//load user
+	conn := RedisPool.Get() //重用已有的连接
+	defer conn.Close()
+	var user []UserRedis
+	err := database.DB.Table("user").Select([]string{"id", "total_favorited", "favorite_count"}).Scan(&user).Error
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, u := range user {
+		conn.Send("HMSET", "user:"+strconv.FormatInt(u.ID, 10), "total_favorited", u.TotalFavorited, "favorite_count", u.FavoriteCount)
+	}
+	//load video
+	var video []VideoRedis
+	err = database.DB.Table("video").Select([]string{"id", "author_user_id", "likes"}).Scan(&video).Error
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, v := range video {
+		conn.Send("HMSET", "video:"+strconv.FormatInt(v.ID, 10), "author_user_id", v.AuthorUserID, "likes_count", v.Likes)
+	}
+	var favorite []FavoriteRedis
+	err = database.DB.Table("favorite").Select([]string{"user_id", "video_id"}).Where("is_deleted=-1").Scan(&favorite).Error
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, f := range favorite {
+		conn.Send("SADD", "user:"+strconv.FormatInt(f.UserID, 10)+":likes", f.VideoID)
+	}
+	conn.Flush()
+	fmt.Println("load cache OK!")
 }
