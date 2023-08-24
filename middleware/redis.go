@@ -92,14 +92,15 @@ func LoadMysqlToRedis() {
 	for _, v := range video {
 		conn.Send("HMSET", "video:"+strconv.FormatInt(v.ID, 10), "author_user_id", v.AuthorUserID, "likes_count", v.Likes)
 	}
+	//load favorite
 	var favorite []FavoriteRedis
-	err = database.DB.Table("favorite").Select([]string{"user_id", "video_id"}).Where("is_deleted=-1").Scan(&favorite).Error
+	err = database.DB.Table("favorite").Select([]string{"user_id", "video_id"}).Where("is_deleted=-1").Order("updated_at desc, video_id").Scan(&favorite).Error
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	for _, f := range favorite {
-		conn.Send("SADD", "user:"+strconv.FormatInt(f.UserID, 10)+":likes", f.VideoID)
+		conn.Send("RPUSH", "user:"+strconv.FormatInt(f.UserID, 10)+":likes", f.VideoID)
 	}
 	conn.Flush()
 	fmt.Println("load cache OK!")
