@@ -1,2 +1,8 @@
 .DS_Store
 config.json
+output/
+.vscode/
+*.log
+local_*
+__debug_*
+./idea
