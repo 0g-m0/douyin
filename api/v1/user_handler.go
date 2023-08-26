@@ -2,6 +2,7 @@
 package v1
 
 import (
+	"crypto/rand"
 	"douyin/config"
 	"douyin/database"
 	"douyin/database/models"
@@ -9,6 +10,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"math/big"
 	"net/http"
 	"sync"
 	"time"
@@ -94,7 +96,8 @@ func UserRegisterHandler(c *gin.Context) {
 	}
 
 	// 设置用户默认头像
-	defaultAvatarURL := fmt.Sprintf("https://%s.%s/%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_avatar.png")
+	n, _ := rand.Int(rand.Reader, big.NewInt(9))
+	defaultAvatarURL := fmt.Sprintf("https://%s.%s/%s%d%s", config.AppConfigInstance.AliyunOSSBucketName, config.AppConfigInstance.AliyunOSSEndpoint, "img/default_avatar_", n.Int64()+1, ".png")
 	user.Avatar = defaultAvatarURL
 
 	// 设置用户默认背景图
