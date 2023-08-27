@@ -63,7 +63,12 @@ func GetFeedHandler(c *gin.Context) {
 		return
 	}
 
-	current_userID, _ := c.Get("user_id")
+	current_userID, exsit := c.Get("user_id")
+	if !exsit {
+		current_userID = -1
+	}
+
+
 
 	var video_ids []int64
 	var videos []models.Video
