@@ -5,12 +5,13 @@ import (
 )
 
 type Favorite struct {
-	ID        int64     `gorm:"column:id;primary_key"`
-	UserID    int64     `gorm:"column:user_id"`
-	VideoID   int64     `gorm:"column:video_id"`
-	IsDeleted int8      `gorm:"column:is_deleted"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	ID           int64     `gorm:"column:id;primary_key"`
+	UserID       int64     `gorm:"column:user_id"`
+	VideoID      int64     `gorm:"column:video_id"`
+	AuthorUserID int64     `gorm:"column:author_user_id"`
+	IsDeleted    int8      `gorm:"column:is_deleted"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
+	UpdatedAt    time.Time `gorm:"column:updated_at"`
 }
 
 func (Favorite) TableName() string {
