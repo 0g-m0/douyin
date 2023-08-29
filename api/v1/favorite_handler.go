@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"douyin/cache"
 	//"database/sql"
 	"douyin/database"
 	"douyin/database/models"
@@ -11,8 +12,6 @@ import (
 
 	"net/http"
 	"strconv"
-
-	"douyin/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gomodule/redigo/redis"
@@ -73,7 +72,7 @@ func FavoriteAction(ctx *gin.Context) {
 		return
 	}
 
-	redisPool := middleware.RedisPool
+	redisPool := cache.RedisPool
 	if redisPool != nil {
 		fmt.Println("get")
 	}
@@ -115,7 +114,7 @@ func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) err
 
 	var authoruid int64
 	// 获取视频对应的用户ID
-	authoruid, err := middleware.GetAuthorUserIdFromRedis(vid)
+	authoruid, err := cache.GetAuthorUserIdFromRedis(vid)
 	if err != nil {
 		fmt.Println("获取视频作者id错误", err)
 		return err
@@ -142,21 +141,21 @@ func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) err
 		conn.Send("HINCRBY", keyUser, "favorite_count", change)
 		conn.Send("EXPIRE", keyUser, expireTime)
 	} else {
-		middleware.GetFavoriteCountFromRedis(uid)
+		cache.GetFavoriteCountFromRedis(uid)
 	}
 	exist, _ = redis.Int(conn.Do("EXISTS", keyVideo))
 	if exist == 1 {
 		conn.Send("HINCRBY", keyVideo, "likes_count", change)
 		conn.Send("EXPIRE", keyVideo, expireTime)
 	} else {
-		middleware.GetVideoLikesFromRedis(vid)
+		cache.GetVideoLikesFromRedis(vid)
 	}
 	exist, _ = redis.Int(conn.Do("EXISTS", keyAuthor))
 	if exist == 1 {
 		conn.Send("HINCRBY", keyAuthor, "total_favorited", change)
 		conn.Do("EXPIRE", keyAuthor, expireTime)
 	} else {
-		middleware.GetTotalFavoritedFromRedis(authoruid)
+		cache.GetTotalFavoritedFromRedis(authoruid)
 	}
 
 	conn.Flush()
@@ -167,7 +166,7 @@ func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) err
 // 更新favorite表，1代表取消点赞，-1代表未取消点赞
 func FavoriteTableChange(db *gorm.DB, tableName string, userID int64, videoID int64, action bool) error {
 	var fav models.Favorite
-	authoruid, _ := middleware.GetAuthorUserIdFromRedis(videoID)
+	authoruid, _ := cache.GetAuthorUserIdFromRedis(videoID)
 	err := db.Table(tableName).Where("user_id = ? AND video_id = ?", userID, videoID).First(&fav).Error
 
 	//now := time.Now()
@@ -277,7 +276,7 @@ func FavoriteList(ctx *gin.Context) {
 
 // 获取视频id
 func GetVideoId(userID int64) []int64 {
-	conn := middleware.RedisPool.Get() //重用已有的连接
+	conn := cache.RedisPool.Get() //重用已有的连接
 	defer conn.Close()
 	key := "user:" + strconv.FormatInt(userID, 10) + ":likes"
 	exist, _ := redis.Int(conn.Do("EXISTS", key))

@@ -3,6 +3,7 @@ package v1
 
 import (
 	"crypto/rand"
+	"douyin/cache"
 	"douyin/config"
 	"douyin/database"
 	"douyin/database/models"
@@ -220,6 +221,9 @@ func UserInfoHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+
+	userDTO.TotalFavorited, _ = cache.GetTotalFavoritedFromRedis(request.UserID)
+	userDTO.FavoriteCount, _ = cache.GetFavoriteCountFromRedis(request.UserID)
 
 	// 构建响应
 	response := UserProfileResponse{
