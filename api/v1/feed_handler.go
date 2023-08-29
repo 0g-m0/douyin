@@ -6,13 +6,14 @@ import (
 	"douyin/database/models"
 	"log"
 
-	// "github.com/jinzhu/gorm"
+	"github.com/jinzhu/gorm"
 	// "os"
 	// "strings"
 	"github.com/gin-gonic/gin"
 	// "strconv"
 	"net/http"
 	"time"
+	"douyin/cache"
 )
 
 type feedRequest struct {
@@ -113,22 +114,23 @@ func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
 	var far models.Favorite
 	var isfar bool
 	result2 := database.DB.Table("favorite").Where("user_id = ? AND video_id = ? AND is_deleted=-1", current_userID, video_id).First(&far)
-	// if result2.Error != nil && result2.Error != gorm.ErrRecordNotFound {
-	// 	log.Fatal(result2.Error)
-	// }
+	if result2.Error != nil && result2.Error != gorm.ErrRecordNotFound {
+		log.Println(result2.Error)
+	}
 
 	if result2.RowsAffected > 0 {
 		isfar = true
 	} else {
 		isfar = false
 	}
-
+	likes,_ :=cache.GetVideoLikesFromRedis(video_id)
 	var video_resp = Video_feedResp{
 		ID:            video_id,
 		Author:        author_resp,
 		PlayURL:       video.PlayURL,
 		CoverURL:      video.CoverURL,
-		FavoriteCount: int64(video.Likes),
+		// FavoriteCount: int64(video.Likes),
+		FavoriteCount: likes,
 		CommentCount:  int64(video.Comments),
 		IsFavorite:    isfar,
 		Title:         video.Title,
@@ -146,7 +148,7 @@ func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp 
 
 	result1 := database.DB.Table("user").Where("id = ?", author_id).First(&author)
 	if result1.Error != nil {
-		log.Fatal(result1.Error)
+		log.Println(result1.Error)
 	}
 
 	result2 := database.DB.Table("relation").Where("follower_id = ? AND followed_id = ?", current_userID, author_id).First(&relation)
@@ -160,15 +162,20 @@ func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp 
 		follow = false
 	}
 
+	FavoriteCount,_ := cache.GetFavoriteCountFromRedis(author_id)
+	TotalFavorited,_ := cache.GetTotalFavoritedFromRedis(author_id)
+
 	author_resp = Author_feedResp{
 		ID:              author_id,
 		Name:            author.Name,
 		BackgroundImage: author.BackgroundImage, // 用户个人页顶部大图
-		FavoriteCount:   author.FavoriteCount,   // 喜欢数
+		// FavoriteCount:   author.FavoriteCount,   // 喜欢数
+		FavoriteCount:   FavoriteCount,   // 喜欢数
 		FollowCount:     author.FollowCount,     // 关注总数
 		FollowerCount:   author.FollowerCount,   // 粉丝总数
 		Signature:       author.Signature,       // 个人简介
-		TotalFavorited:  author.TotalFavorited,  // 获赞数量
+		// TotalFavorited:  author.TotalFavorited,  // 获赞数量
+		TotalFavorited:  TotalFavorited,  // 获赞数量
 		WorkCount:       author.WorkCount,       // 作品数
 		Avatar:          author.Avatar,
 		IsFollow:        follow,
