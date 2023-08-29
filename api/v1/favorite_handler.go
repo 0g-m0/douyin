@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	//"log"
-	"time"
+	//"time"
 
 	"net/http"
 	"strconv"
@@ -21,8 +21,9 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
-//const dbName string = "mysql"
-//const dbConnect string = "root:123456@tcp(127.0.0.1:3306)/douyin?charset=utf8&parseTime=true" //设置数据库连接参数
+// const dbName string = "mysql"
+// const dbConnect string = "root:123456@tcp(127.0.0.1:3306)/douyin?charset=utf8&parseTime=true" //设置数据库连接参数
+const expireTime int = 2 * 24 * 60 * 60
 
 func Response(ctx *gin.Context, httpStatus int, v interface{}) {
 	ctx.JSON(httpStatus, v)
@@ -88,23 +89,17 @@ func FavoriteAction(ctx *gin.Context) {
 }
 
 func FavoriteActionDo(uid, vid int64, action int8, redisPool *redis.Pool) error {
-	conn := redisPool.Get() //重用已有的连接
-	defer conn.Close()
-	// 获取视频对应的用户ID
-	authoruid, _ := redis.Int64(conn.Do("HGET", "video:"+strconv.FormatInt(vid, 10), "author_user_id"))
+	//conn := redisPool.Get() //重用已有的连接
+	//defer conn.Close()
 
 	tx := database.DB.Begin() //开启数据库事务
+	act := action == 1        // 设置 act 为 true 或 false
 
-	act := action == 1 // 设置 act 为 true 或 false
-
-	err1 := FavoriteTableChange(tx, "favorite", uid, vid, act)
-	err2 := ChangeUserFavoriteCount(tx, "user", uid, "favorite_count", act)
-	err3 := ChangeUserFavoriteCount(tx, "user", authoruid, "total_favorited", act)
-	err4 := ChangeVideoLikesCount(tx, "video", vid, act)
-
-	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+	err := FavoriteTableChange(tx, "favorite", uid, vid, act)
+	if err != nil {
 		tx.Rollback() //有错误回滚
 		fmt.Println("Rollback the transaction")
+		return fmt.Errorf("点赞失败")
 	} else {
 		tx.Commit()
 		fmt.Println("Commit the transaction")
@@ -112,7 +107,6 @@ func FavoriteActionDo(uid, vid int64, action int8, redisPool *redis.Pool) error 
 	}
 	fmt.Println("All database operations completed.")
 	return nil
-
 }
 
 func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) error {
@@ -121,10 +115,9 @@ func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) err
 
 	var authoruid int64
 	// 获取视频对应的用户ID
-	authoruid, err := redis.Int64(conn.Do("HGET", "video:"+strconv.FormatInt(vid, 10), "author_user_id"))
-
+	authoruid, err := middleware.GetAuthorUserIdFromRedis(vid)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("获取视频作者id错误", err)
 		return err
 	}
 
@@ -132,40 +125,60 @@ func CacheFavoriteAction(uid, vid int64, action bool, redisPool *redis.Pool) err
 		fmt.Println("Get conn!")
 	}
 	//使用 Redis 的哈希（Hash）来存储用户表和视频表的信息，使用集合（Set）来存储点赞关系。
+	keyUser := "user:" + strconv.FormatInt(uid, 10)
+	keyVideo := "video:" + strconv.FormatInt(vid, 10)
+	keyAuthor := "user:" + strconv.FormatInt(authoruid, 10)
+	var change int
 
 	if action {
-		conn.Send("LPUSH", "user:"+strconv.FormatInt(uid, 10)+":likes", vid)                 //存储点赞关系
-		conn.Send("HINCRBY", "user:"+strconv.FormatInt(uid, 10), "favorite_count", 1)        //增加用户点赞数
-		conn.Send("HINCRBY", "video:"+strconv.FormatInt(vid, 10), "likes_count", 1)          //增加用户点赞量
-		conn.Send("HINCRBY", "user:"+strconv.FormatInt(authoruid, 10), "total_favorited", 1) //增加视频作者的被点赞量
-		fmt.Println("cache ok!")
+		conn.Send("LPUSH", "user:"+strconv.FormatInt(uid, 10)+":likes", vid) //存储点赞关系
+		change = 1
 	} else {
 		conn.Send("LREM", "user:"+strconv.FormatInt(uid, 10)+":likes", 0, vid)
-		conn.Send("HINCRBY", "user:"+strconv.FormatInt(uid, 10), "favorite_count", -1)
-		conn.Send("HINCRBY", "video:"+strconv.FormatInt(vid, 10), "likes_count", -1)
-		conn.Send("HINCRBY", "user:"+strconv.FormatInt(authoruid, 10), "total_favorited", -1)
-		fmt.Println("cache ok!")
+		change = -1
 	}
+	exist, _ := redis.Int(conn.Do("EXISTS", keyUser))
+	if exist == 1 {
+		conn.Send("HINCRBY", keyUser, "favorite_count", change)
+		conn.Send("EXPIRE", keyUser, expireTime)
+	} else {
+		middleware.GetFavoriteCountFromRedis(uid)
+	}
+	exist, _ = redis.Int(conn.Do("EXISTS", keyVideo))
+	if exist == 1 {
+		conn.Send("HINCRBY", keyVideo, "likes_count", change)
+		conn.Send("EXPIRE", keyVideo, expireTime)
+	} else {
+		middleware.GetVideoLikesFromRedis(vid)
+	}
+	exist, _ = redis.Int(conn.Do("EXISTS", keyAuthor))
+	if exist == 1 {
+		conn.Send("HINCRBY", keyAuthor, "total_favorited", change)
+		conn.Do("EXPIRE", keyAuthor, expireTime)
+	} else {
+		middleware.GetTotalFavoritedFromRedis(authoruid)
+	}
+
 	conn.Flush()
+
 	return nil
 }
 
 // 更新favorite表，1代表取消点赞，-1代表未取消点赞
 func FavoriteTableChange(db *gorm.DB, tableName string, userID int64, videoID int64, action bool) error {
 	var fav models.Favorite
+	authoruid, _ := middleware.GetAuthorUserIdFromRedis(videoID)
 	err := db.Table(tableName).Where("user_id = ? AND video_id = ?", userID, videoID).First(&fav).Error
 
-	now := time.Now()
+	//now := time.Now()
 
 	if action {
 		if gorm.IsRecordNotFoundError(err) {
 			// 插入新记录，is_deleted 为 0，created_at 和 update_at 为当前时间
 			newFav := models.Favorite{
-				UserID:    userID,
-				VideoID:   videoID,
-				IsDeleted: -1,
-				CreatedAt: now,
-				UpdatedAt: now,
+				UserID:       userID,
+				VideoID:      videoID,
+				AuthorUserID: authoruid,
 			}
 			err = db.Table(tableName).Create(&newFav).Error
 			if err != nil {
@@ -175,33 +188,17 @@ func FavoriteTableChange(db *gorm.DB, tableName string, userID int64, videoID in
 			//fmt.Println("插入成功")
 		} else {
 			// 已点赞禁止再点赞
-			if fav.IsDeleted == -1 {
-				fmt.Println("操作错误!")
-				return fmt.Errorf("操作错误！")
-			}
-			// 更新记录的 is_deleted 和 updated_at 字段
-			err = db.Model(&fav).Updates(models.Favorite{IsDeleted: -1, UpdatedAt: now}).Error
-			if err != nil {
-				fmt.Println("更新记录失败:", err)
-				return err
-			}
-			//fmt.Println("点赞更改记录成功")
+			return fmt.Errorf("操作错误！")
 		}
 	} else {
 		if gorm.IsRecordNotFoundError(err) {
-			//数据库中无点赞记录，故不允许插入未点赞记录
+			//数据库中无点赞记录，取消点赞即非法操作
 			if err != nil {
 				fmt.Println("操作错误:", err)
 				return err
 			}
 		} else {
-			// 已取消点赞禁止再次取消点赞
-			if fav.IsDeleted == 1 {
-				fmt.Println("操作错误！")
-				return fmt.Errorf("操作错误！")
-			}
-			// 更新记录的 is_deleted 和 updated_at 字段
-			err = db.Model(&fav).Updates(models.Favorite{IsDeleted: 1, UpdatedAt: now}).Error
+			err = db.Delete(&fav).Error
 			if err != nil {
 				fmt.Println("更新记录失败:", err)
 				return err
@@ -282,13 +279,29 @@ func FavoriteList(ctx *gin.Context) {
 func GetVideoId(userID int64) []int64 {
 	conn := middleware.RedisPool.Get() //重用已有的连接
 	defer conn.Close()
-	len, err := redis.Int(conn.Do("LLEN", "user:"+strconv.FormatInt(userID, 10)+":likes"))
+	key := "user:" + strconv.FormatInt(userID, 10) + ":likes"
+	exist, _ := redis.Int(conn.Do("EXISTS", key))
+	if exist != 1 { //缓存查询失败，将数据载入缓存
+		var videoId []int64
+		err := database.DB.Table("favorite").Where("user_id=?", userID).Order("id desc, video_id").Pluck("video_id", &videoId).Error
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		for _, id := range videoId {
+			conn.Send("RPUSH", key, id)
+		}
+		conn.Flush()
+		fmt.Println("load cache OK!")
+		return videoId
+	}
+	len, err := redis.Int(conn.Do("LLEN", key))
 	var videoId []int64
 	//fmt.Println(userID)
 	//err := database.DB.Table("favorite").Where("user_id=? AND is_deleted=-1", userID).Pluck("video_id", &videoId).Error
 	for i := 0; i < len; i++ {
 		var id int64
-		id, err = redis.Int64(conn.Do("LINDEX", "user:"+strconv.FormatInt(userID, 10)+":likes", i))
+		id, err = redis.Int64(conn.Do("LINDEX", key, i))
 		videoId = append(videoId, id)
 	}
 	if err != nil {
