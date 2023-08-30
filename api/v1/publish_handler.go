@@ -49,18 +49,18 @@ func PublishListHandler(c *gin.Context) {
 		return
 	}
 	
-	if req_uid_int != tokenUserIDValue{
-		log.Printf("token记录的uid和req上传uid不一致")
-		fmt.Println("request.UserID:",req_uid_int)
-		fmt.Println("token uid: ",tokenUserIDValue)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "token记录的uid和req上传uid不一致"})
-		return
-	}
+	// if req_uid_int != tokenUserIDValue{
+	// 	log.Printf("token记录的uid和req上传uid不一致")
+	// 	fmt.Println("request.UserID:",req_uid_int)
+	// 	fmt.Println("token uid: ",tokenUserIDValue)
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "token记录的uid和req上传uid不一致"})
+	// 	return
+	// }
 
 
 	var video_ids []int64
 	var videos []models.Video
-	result := database.DB.Table("video").Where("author_user_id = ?", tokenUserIDValue).Select("id").Find(&videos)
+	result := database.DB.Table("video").Where("author_user_id = ?", req_uid_int).Select("id").Find(&videos)
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
