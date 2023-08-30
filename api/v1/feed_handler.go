@@ -66,7 +66,7 @@ func GetFeedHandler(c *gin.Context) {
 
 	current_userID, exsit := c.Get("user_id")
 	if !exsit {
-		current_userID = -1
+		current_userID = int(-1)
 	}
 
 
@@ -86,7 +86,7 @@ func GetFeedHandler(c *gin.Context) {
 	video_ids = reverseList(video_ids)
 	var Videos []Video_feedResp
 	for _, v_id := range video_ids {
-		Videos = append(Videos, Get_Video_for_feed(v_id, current_userID.(int64)))
+		Videos = append(Videos, Get_Video_for_feed(v_id, int64(current_userID.(int))))
 	}
 
 	// timestamp := time.Now().Unix()
