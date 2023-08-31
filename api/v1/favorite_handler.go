@@ -321,24 +321,27 @@ func GetVideoById(videoId []int64) ([]models.VideoFA, error) {
 		//fmt.Println(v)
 		database.DB.Table("user").Where("id=?", v.AuthorUserID).Find(&u)
 		//fmt.Println(u)
+		favorite_count, _ := cache.GetFavoriteCountFromRedis(u.ID)
+		total_favorited, _ := cache.GetTotalFavoritedFromRedis(u.ID)
+		likes_count, _ := cache.GetVideoLikesFromRedis(v.VideoID)
 		userfa := models.UserFA{
 			Avatar:          u.Avatar,
 			BackgroundImage: u.BackgroundImage,
-			FavoriteCount:   u.FavoriteCount,
+			FavoriteCount:   favorite_count,
 			FollowCount:     u.FollowCount,
 			FollowerCount:   u.FollowerCount,
 			ID:              u.ID,
 			IsFollow:        false,
 			Name:            u.Name,
 			Signature:       u.Signature,
-			TotalFavorited:  strconv.FormatInt(u.TotalFavorited, 10),
+			TotalFavorited:  strconv.FormatInt(total_favorited, 10),
 			WorkCount:       u.WorkCount,
 		}
 		videofa := models.VideoFA{
 			Author:        userfa,
 			CommentCount:  int64(v.Comments),
 			CoverURL:      v.CoverURL,
-			FavoriteCount: int64(v.Likes),
+			FavoriteCount: likes_count,
 			ID:            v.VideoID,
 			IsFavorite:    true,
 			PlayURL:       v.PlayURL,
