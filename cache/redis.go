@@ -12,6 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gomodule/redigo/redis"
+
+	"log"
+
+	"github.com/jinzhu/gorm"
 )
 
 var RedisPool *redis.Pool
@@ -162,4 +166,39 @@ func GetAuthorUserIdFromRedis(vid int64) (int64, error) {
 	}
 	conn.Do("EXPIRE", key, expireTime)
 	return res, err
+}
+
+func CheckUserLikedVideo(uid, vid int64) (bool, error) {
+	conn := RedisPool.Get()
+	defer conn.Close()
+
+	likeKey := "user:" + strconv.FormatInt(uid, 10) + ":likes"
+	vidStr := strconv.FormatInt(vid, 10)
+
+	// 在redis缓存中查询
+	likedIndex, err := redis.String(conn.Do("LINDEX", likeKey, vidStr))
+	if err != nil {
+		return false, err // Redis 操作出错
+	}
+
+	if likedIndex != "" {
+		return true, nil // 在 Redis 缓存中找到点赞关系
+	}
+
+	// 在 MySQL 数据库中查找
+	var far models.Favorite
+	var isfar bool
+	result := database.DB.Table("favorite").Where("user_id = ? AND video_id = ?", uid, vid).First(&far)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		log.Println(result.Error)
+		return false, result.Error
+	}
+
+	if result.RowsAffected > 0 {
+		isfar = true
+	} else {
+		isfar = false
+	}
+
+	return isfar, nil
 }
