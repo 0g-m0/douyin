@@ -108,6 +108,19 @@ func CommentActionHandler(c *gin.Context) {
 		c.JSON(http.StatusOK, response)
 
 	} else if request.ActionType == 2 {
+
+		// 删除评论之前，查询用户id是否与评论用户id一致
+		var comment models.Comment
+		if err := database.DB.Table("comment").Where("id = ?", request.CommentID).First(&comment).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+			return
+		}
+
+		if comment.UserID != userID {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户id不一致"})
+			return
+		}
+
 		// 开始数据库事务
 		tx := database.DB.Begin()
 
