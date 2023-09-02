@@ -97,7 +97,7 @@ func FavoriteActionDo(uid, vid int64, action int8, redisPool *redis.Pool) error 
 	err := FavoriteTableChange(tx, "favorite", uid, vid, act)
 	if err != nil {
 		tx.Rollback() //有错误回滚
-		fmt.Println("Rollback the transaction")
+		fmt.Println("Rollback the transaction", err)
 		return fmt.Errorf("点赞失败")
 	} else {
 		tx.Commit()
