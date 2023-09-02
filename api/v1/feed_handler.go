@@ -1,25 +1,22 @@
 package v1
 
 import (
-	// "douyin/config"
 	"douyin/database"
 	"douyin/database/models"
 	"log"
 
 	"douyin/cache"
-	"github.com/jinzhu/gorm"
-	// "os"
-	// "strings"
 	"github.com/gin-gonic/gin"
-	// "strconv"
+	"github.com/jinzhu/gorm"
 	"net/http"
 	"time"
 )
 
-type feedRequest struct {
+type FeedRequest struct {
 	LatestTime int64  `json:"latest_time,omitempty"` // 可选参数，限制返回视频的最新投稿时间戳，精确到秒，不填表示当前时间
 	Token      string `json:"token,omitempty"`       // 用户登录状态下设置
 }
+
 type feedResponse struct {
 	StatusCode int64 `json:"status_code"` // 状态码，0-成功，其他值-失败
 	// StatusMsg  string `json:"status_msg"` // 返回状态描述
@@ -58,20 +55,25 @@ type Author_feedResp struct {
 
 // 处理获取用户feed流请求 /feed
 func GetFeedHandler(c *gin.Context) {
-	var request feedRequest
+	var request FeedRequest
 	if err := c.ShouldBind(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
 		return
 	}
 
-	current_userID, exsit := c.Get("user_id")
-	if !exsit {
-		current_userID = int(-1)
+	// 如果没有传递 latest_time 参数，则默认为当前时间
+	if request.LatestTime == 0 {
+		request.LatestTime = time.Now().Unix()
 	}
+
+	// 如果没有传递 token 参数，则默认用户为未登录状态
+	var current_userID, _ = c.Get("user_id")
 
 	var video_ids []int64
 	var videos []models.Video
-	result := database.DB.Table("video").Select("id").Find(&videos)
+
+	// 根据时间戳倒序排序返回最多30个视频
+	result := database.DB.Table("video").Where("create_time < ?", time.Unix(request.LatestTime, 0)).Order("create_time desc").Limit(30).Select("id").Find(&videos)
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
@@ -87,12 +89,10 @@ func GetFeedHandler(c *gin.Context) {
 		Videos = append(Videos, Get_Video_for_feed(v_id, int64(current_userID.(int))))
 	}
 
-	// timestamp := time.Now().Unix()
 	response := feedResponse{
 		StatusCode: 0,                 // 成功状态码
 		NextTime:   time.Now().Unix(), // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
 
-		// StatusMsg  : "feed get success" ,// 返回状态描述
 		VideoList: Videos, // 视频列表
 	}
 
@@ -123,11 +123,10 @@ func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
 	}
 	likes, _ := cache.GetVideoLikesFromRedis(video_id)
 	var video_resp = Video_feedResp{
-		ID:       video_id,
-		Author:   author_resp,
-		PlayURL:  video.PlayURL,
-		CoverURL: video.CoverURL,
-		// FavoriteCount: int64(video.Likes),
+		ID:            video_id,
+		Author:        author_resp,
+		PlayURL:       video.PlayURL,
+		CoverURL:      video.CoverURL,
 		FavoriteCount: likes,
 		CommentCount:  int64(video.Comments),
 		IsFavorite:    isfar,
@@ -167,16 +166,14 @@ func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp 
 		ID:              author_id,
 		Name:            author.Name,
 		BackgroundImage: author.BackgroundImage, // 用户个人页顶部大图
-		// FavoriteCount:   author.FavoriteCount,   // 喜欢数
-		FavoriteCount: FavoriteCount,        // 喜欢数
-		FollowCount:   author.FollowCount,   // 关注总数
-		FollowerCount: author.FollowerCount, // 粉丝总数
-		Signature:     author.Signature,     // 个人简介
-		// TotalFavorited:  author.TotalFavorited,  // 获赞数量
-		TotalFavorited: TotalFavorited,   // 获赞数量
-		WorkCount:      author.WorkCount, // 作品数
-		Avatar:         author.Avatar,
-		IsFollow:       follow,
+		FavoriteCount:   FavoriteCount,          // 喜欢数
+		FollowCount:     author.FollowCount,     // 关注总数
+		FollowerCount:   author.FollowerCount,   // 粉丝总数
+		Signature:       author.Signature,       // 个人简介
+		TotalFavorited:  TotalFavorited,         // 获赞数量
+		WorkCount:       author.WorkCount,       // 作品数
+		Avatar:          author.Avatar,
+		IsFollow:        follow,
 	}
 
 	return author_resp
