@@ -6,6 +6,7 @@ import (
 	"douyin/database/models"
 	"log"
 
+	"douyin/cache"
 	"github.com/jinzhu/gorm"
 	// "os"
 	// "strings"
@@ -13,7 +14,6 @@ import (
 	// "strconv"
 	"net/http"
 	"time"
-	"douyin/cache"
 )
 
 type feedRequest struct {
@@ -69,8 +69,6 @@ func GetFeedHandler(c *gin.Context) {
 		current_userID = int(-1)
 	}
 
-
-
 	var video_ids []int64
 	var videos []models.Video
 	result := database.DB.Table("video").Select("id").Find(&videos)
@@ -123,12 +121,12 @@ func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
 	} else {
 		isfar = false
 	}
-	likes,_ :=cache.GetVideoLikesFromRedis(video_id)
+	likes, _ := cache.GetVideoLikesFromRedis(video_id)
 	var video_resp = Video_feedResp{
-		ID:            video_id,
-		Author:        author_resp,
-		PlayURL:       video.PlayURL,
-		CoverURL:      video.CoverURL,
+		ID:       video_id,
+		Author:   author_resp,
+		PlayURL:  video.PlayURL,
+		CoverURL: video.CoverURL,
 		// FavoriteCount: int64(video.Likes),
 		FavoriteCount: likes,
 		CommentCount:  int64(video.Comments),
@@ -162,23 +160,23 @@ func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp 
 		follow = false
 	}
 
-	FavoriteCount,_ := cache.GetFavoriteCountFromRedis(author_id)
-	TotalFavorited,_ := cache.GetTotalFavoritedFromRedis(author_id)
+	FavoriteCount, _ := cache.GetFavoriteCountFromRedis(author_id)
+	TotalFavorited, _ := cache.GetTotalFavoritedFromRedis(author_id)
 
 	author_resp = Author_feedResp{
 		ID:              author_id,
 		Name:            author.Name,
 		BackgroundImage: author.BackgroundImage, // 用户个人页顶部大图
 		// FavoriteCount:   author.FavoriteCount,   // 喜欢数
-		FavoriteCount:   FavoriteCount,   // 喜欢数
-		FollowCount:     author.FollowCount,     // 关注总数
-		FollowerCount:   author.FollowerCount,   // 粉丝总数
-		Signature:       author.Signature,       // 个人简介
+		FavoriteCount: FavoriteCount,        // 喜欢数
+		FollowCount:   author.FollowCount,   // 关注总数
+		FollowerCount: author.FollowerCount, // 粉丝总数
+		Signature:     author.Signature,     // 个人简介
 		// TotalFavorited:  author.TotalFavorited,  // 获赞数量
-		TotalFavorited:  TotalFavorited,  // 获赞数量
-		WorkCount:       author.WorkCount,       // 作品数
-		Avatar:          author.Avatar,
-		IsFollow:        follow,
+		TotalFavorited: TotalFavorited,   // 获赞数量
+		WorkCount:      author.WorkCount, // 作品数
+		Avatar:         author.Avatar,
+		IsFollow:       follow,
 	}
 
 	return author_resp
