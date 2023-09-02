@@ -75,7 +75,9 @@ func GetFeedHandler(c *gin.Context) {
 	// 根据时间戳倒序排序返回最多30个视频
 	result := database.DB.Table("video").Where("create_time < ?", time.Unix(request.LatestTime, 0)).Order("create_time desc").Limit(30).Select("id").Find(&videos)
 	if result.Error != nil {
-		log.Fatal(result.Error)
+		log.Println(result.Error)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "数据库获取id错误"})
+		return
 	}
 	for _, video := range videos {
 		video_ids = append(video_ids, video.VideoID)
@@ -83,9 +85,9 @@ func GetFeedHandler(c *gin.Context) {
 	// fmt.Println(video_ids)
 
 	//新发布的先刷到，将vid倒叙排列
-	video_ids = reverseList(video_ids)
+	// video_ids = reverseList(video_ids)
 	var Videos []Video_feedResp
-	for _, v_id := range video_ids {
+	for _, v_id := range video_ids[:30] {
 		Videos = append(Videos, Get_Video_for_feed(v_id, int64(current_userID.(int))))
 	}
 
