@@ -10,11 +10,12 @@ import (
 	"github.com/jinzhu/gorm"
 	"net/http"
 	"time"
+	// "strconv"
 )
 
 type FeedRequest struct {
-	LatestTime int64  `json:"latest_time,omitempty"` // 可选参数，限制返回视频的最新投稿时间戳，精确到秒，不填表示当前时间
-	Token      string `json:"token,omitempty"`       // 用户登录状态下设置
+	LatestTime int64  `form:"latest_time,omitempty"` // 可选参数，限制返回视频的最新投稿时间戳，精确到秒，不填表示当前时间
+	Token      string `form:"token,omitempty"`       // 用户登录状态下设置
 }
 
 type feedResponse struct {
@@ -56,24 +57,32 @@ type Author_feedResp struct {
 // 处理获取用户feed流请求 /feed
 func GetFeedHandler(c *gin.Context) {
 	var request FeedRequest
-	if err := c.ShouldBind(&request); err != nil {
+	if err := c.ShouldBindQuery(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
 		return
 	}
 
+
+	log.Println("request.LatestTime",request.LatestTime)
+	
+
 	// 如果没有传递 latest_time 参数，则默认为当前时间
 	if request.LatestTime == 0 {
-		request.LatestTime = time.Now().Unix()
+		// latest_num = int(time.Now().Unix())
+		log.Println("No latest time,use time.Now instead")
 	}
+	log.Println(request.LatestTime)
+	log.Println(time.Unix(request.LatestTime, 0))
 
 	// 如果没有传递 token 参数，则默认用户为未登录状态
 	var current_userID, _ = c.Get("user_id")
+	// current_userID = current_userID
 
 	var video_ids []int64
 	var videos []models.Video
-
+	
 	// 根据时间戳倒序排序返回最多30个视频
-	result := database.DB.Table("video").Where("create_time < ?", time.Unix(request.LatestTime, 0)).Order("create_time desc").Limit(30).Select("id").Find(&videos)
+	result := database.DB.Table("video").Where("created_at > ?", time.Unix(request.LatestTime, 0)).Order("created_at desc").Limit(30).Select("id").Find(&videos)
 	if result.Error != nil {
 		log.Println(result.Error)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "数据库获取id错误"})
@@ -87,13 +96,46 @@ func GetFeedHandler(c *gin.Context) {
 	//新发布的先刷到，将vid倒叙排列
 	// video_ids = reverseList(video_ids)
 	var Videos []Video_feedResp
-	for _, v_id := range video_ids[:30] {
-		Videos = append(Videos, Get_Video_for_feed(v_id, int64(current_userID.(int))))
+	
+
+	var video  models.Video
+	var next_time_int64 int64
+
+	//	没有新视频
+	if len(video_ids) == 0 {
+		
+		
+		next_time_int64 = time.Now().Unix()
+	}else{
+		//返回视频不足30条
+		if len(video_ids) < 30{
+			for _, v_id := range video_ids {
+				Videos = append(Videos, Get_Video_for_feed(v_id, current_userID.(int64)))
+			}
+
+		}else{
+			//返回视频超过30条
+			for _, v_id := range video_ids[:30] {
+				Videos = append(Videos, Get_Video_for_feed(v_id, current_userID.(int64)))
+			}
+	
+		}
+			
+			
+			re := database.DB.Table("video").Where("id = ?", videos[0].VideoID).First(&video)
+			if re.Error != nil {
+				log.Println(result.Error)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "数据库获取created_time错误"})
+				return
+			}
+			
+			next_time_int64 = video.CreatedAt.Unix()
 	}
+	
 
 	response := feedResponse{
 		StatusCode: 0,                 // 成功状态码
-		NextTime:   time.Now().Unix(), // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
+		NextTime:  next_time_int64 , // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
 
 		VideoList: Videos, // 视频列表
 	}
