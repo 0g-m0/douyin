@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
 )
 
 type FeedRequest struct {
@@ -132,7 +133,18 @@ func Get_Video_for_feed(video_id int64, current_userID int64) FeedVideoResponse 
 	autherID := video.AuthorUserID
 	author_resp := Get_author_for_feed(autherID, current_userID)
 
-	isfar, _ := cache.CheckUserLikedVideo(current_userID, video_id)
+	var far models.Favorite
+	var isfar bool
+	result2 := database.DB.Table("favorite").Where("user_id = ? AND video_id = ? AND is_deleted=-1", current_userID, video_id).First(&far)
+	if result2.Error != nil && result2.Error != gorm.ErrRecordNotFound {
+		log.Println(result2.Error)
+	}
+
+	if result2.RowsAffected > 0 {
+		isfar = true
+	} else {
+		isfar = false
+	}
 
 	likes, _ := cache.GetVideoLikesFromRedis(video_id)
 	var video_resp = FeedVideoResponse{
