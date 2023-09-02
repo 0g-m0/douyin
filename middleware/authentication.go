@@ -19,12 +19,6 @@ func JWTMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 如果是视频流接口，则跳过验证
-		if requestPath == "/douyin/feed/" {
-			c.Next()
-			return
-		}
-
 		// 需要验证token的接口：视频流接口、用户信息接口、投稿接口、发布列表、赞操作、喜欢列表、评论操作、评论列表
 
 		// 需要验证user_id的接口：用户信息接口、发布列表、喜欢列表，自己在接口中单独额外验证user_id与token中的user_id是否一致
@@ -35,10 +29,10 @@ func JWTMiddleware() gin.HandlerFunc {
 			tokenString = c.PostForm("token") // 从 POST form-data 中获取 token
 		}
 
+		// 如果Token为空，则设置user_id为-1
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供Token"})
-			c.Abort()
-			return
+			c.Set("user_id", int64(-1))
 		}
 
 		// 解析Token
