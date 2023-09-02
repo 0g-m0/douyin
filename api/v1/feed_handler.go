@@ -96,7 +96,9 @@ func GetFeedHandler(c *gin.Context) {
 	}
 
 	if result.Error != nil {
-		log.Fatal(result.Error)
+		log.Println(result.Error)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "数据库获取id错误"})
+		return
 	}
 
 	for _, video := range videos {
