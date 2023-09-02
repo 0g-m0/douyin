@@ -208,12 +208,12 @@ func UserInfoHandler(c *gin.Context) {
 	}
 
 	// 验证user_id与token中的user_id是否一致
-	userIDValue, _ := c.Get("user_id")
-	userID, _ := userIDValue.(int64)
-	if userID != request.UserID {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户ID与Token中的用户ID不一致"})
-		return
-	}
+	//userIDValue, _ := c.Get("user_id")
+	//userID, _ := userIDValue.(int64)
+	//if userID != request.UserID {
+	//	c.JSON(http.StatusUnauthorized, gin.H{"error": "用户ID与Token中的用户ID不一致"})
+	//	return
+	//}
 
 	// 查询用户信息
 	var userDTO models.UserDTO
