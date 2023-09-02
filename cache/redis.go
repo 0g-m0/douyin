@@ -173,16 +173,20 @@ func CheckUserLikedVideo(uid, vid int64) (bool, error) {
 	defer conn.Close()
 
 	likeKey := "user:" + strconv.FormatInt(uid, 10) + ":likes"
-	vidStr := strconv.FormatInt(vid, 10)
+	//vidStr := strconv.FormatInt(vid, 10)
 
 	// 在redis缓存中查询
-	likedIndex, err := redis.String(conn.Do("LINDEX", likeKey, vidStr))
-	if err != nil {
-		return false, err // Redis 操作出错
-	}
-
-	if likedIndex != "" {
-		return true, nil // 在 Redis 缓存中找到点赞关系
+	exist, _ := redis.Int(conn.Do("EXISTS", likeKey))
+	if exist == 1 { //缓存存在，查询缓存
+		len, _ := redis.Int(conn.Do("LLEN", likeKey))
+		for i := 0; i < len; i++ {
+			var id int64
+			id, _ = redis.Int64(conn.Do("LINDEX", likeKey, i)) //遍历喜欢列表
+			if id == vid {                                     //存在点赞关系
+				return true, nil
+			}
+		}
+		return false, nil
 	}
 
 	// 在 MySQL 数据库中查找
