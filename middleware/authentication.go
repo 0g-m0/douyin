@@ -3,9 +3,10 @@ package middleware
 import (
 	"douyin/config"
 	"fmt"
+	"net/http"
+
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 func JWTMiddleware() gin.HandlerFunc {
@@ -23,16 +24,24 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// 需要验证user_id的接口：用户信息接口、发布列表、喜欢列表，自己在接口中单独额外验证user_id与token中的user_id是否一致
 
+		// 如果没有token，则设置user_id为0
+		if c.Query("token") == "" && c.PostForm("token") == "" {
+			c.Set("user_id", 0)
+			c.Next()
+			return
+		}
+
 		// 获取请求体中的Token
 		tokenString := c.Query("token")
 		if tokenString == "" {
 			tokenString = c.PostForm("token") // 从 POST form-data 中获取 token
 		}
 
-		// 如果Token为空，则设置user_id为-1
+		// 如果token为空，则设置user_id为0
 		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供Token"})
-			c.Set("user_id", int64(-1))
+			c.Set("user_id", 0)
+			c.Next()
+			return
 		}
 
 		// 解析Token

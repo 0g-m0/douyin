@@ -4,10 +4,11 @@ import (
 	"douyin/database"
 	"douyin/database/models"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/gorm"
 	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
 )
 
 // CommentActionRequest 是评论操作请求的结构体
@@ -47,8 +48,7 @@ func CommentActionHandler(c *gin.Context) {
 		return
 	}
 
-	userIDValue, _ := c.Get("user_id")
-	userID, _ := userIDValue.(int64)
+	userID := c.GetInt64("user_id")
 	fmt.Println(userID)
 
 	// 根据 ActionType 判断是发布评论还是删除评论

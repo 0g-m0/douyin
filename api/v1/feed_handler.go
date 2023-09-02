@@ -1,45 +1,47 @@
 package v1
 
 import (
+	"douyin/cache"
 	"douyin/database"
 	"douyin/database/models"
 	"log"
+	"net/http"
+	"strconv"
+	"time"
 
-	"douyin/cache"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
-	"net/http"
-	"time"
 )
 
 type FeedRequest struct {
-	LatestTime int64  `json:"latest_time,omitempty"` // 可选参数，限制返回视频的最新投稿时间戳，精确到秒，不填表示当前时间
-	Token      string `json:"token,omitempty"`       // 用户登录状态下设置
+	LatestTime int64  `form:"latest_time,omitempty"` // 可选参数，限制返回视频的最新投稿时间
+	StatusMsg  string `form:"status_msg,omitempty"`  // 状态描述，用于调试
+	Token      string `form:"token,omitempty"`       // 用户登录状态下设置
 }
 
-type feedResponse struct {
-	StatusCode int64 `json:"status_code"` // 状态码，0-成功，其他值-失败
-	// StatusMsg  string `json:"status_msg"` // 返回状态描述
-	NextTime  int64            `json:"next_time"`  // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
-	VideoList []Video_feedResp `json:"video_list"` // 视频列表
+type FeedResponse struct {
+	StatusCode int64               `json:"status_code"` // 状态码，0-成功，其他值-失败
+	StatusMsg  string              `json:"status_msg"`  // 返回状态描述
+	NextTime   int64               `json:"next_time"`   // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
+	VideoList  []FeedVideoResponse `json:"video_list"`  // 视频列表
 }
 
 // Video
-type Video_feedResp struct {
-	Author        Author_feedResp `json:"author"`         // 视频作者信息
-	CommentCount  int64           `json:"comment_count"`  // 视频的评论总数
-	CoverURL      string          `json:"cover_url"`      // 视频封面地址
-	FavoriteCount int64           `json:"favorite_count"` // 视频的点赞总数
-	ID            int64           `json:"id"`             // 视频唯一标识
-	IsFavorite    bool            `json:"is_favorite"`    // true-已点赞，false-未点赞
-	PlayURL       string          `json:"play_url"`       // 视频播放地址
-	Title         string          `json:"title"`          // 视频标题
+type FeedVideoResponse struct {
+	Author        FeedAuthorResponse `json:"author"`         // 视频作者信息
+	CommentCount  int64              `json:"comment_count"`  // 视频的评论总数
+	CoverURL      string             `json:"cover_url"`      // 视频封面地址
+	FavoriteCount int64              `json:"favorite_count"` // 视频的点赞总数
+	ID            int64              `json:"id"`             // 视频唯一标识
+	IsFavorite    bool               `json:"is_favorite"`    // true-已点赞，false-未点赞
+	PlayURL       string             `json:"play_url"`       // 视频播放地址
+	Title         string             `json:"title"`          // 视频标题
 }
 
 // 视频作者信息
 //
 // User
-type Author_feedResp struct {
+type FeedAuthorResponse struct {
 	Avatar          string `json:"avatar"`           // 用户头像
 	BackgroundImage string `json:"background_image"` // 用户个人页顶部大图
 	FavoriteCount   int64  `json:"favorite_count"`   // 喜欢数
@@ -55,52 +57,72 @@ type Author_feedResp struct {
 
 // 处理获取用户feed流请求 /feed
 func GetFeedHandler(c *gin.Context) {
-	var request FeedRequest
-	if err := c.ShouldBind(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
-		return
+	// var request FeedRequest
+	// if err := c.ShouldBind(&request); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+	// 	return
+	// }
+
+	LatestTime, err := strconv.ParseInt(c.Query("latest_time"), 10, 64)
+	if err != nil {
+		LatestTime = 0
+	}
+
+	if LatestTime == 0 {
+		LatestTime = time.Now().Unix()
 	}
 
 	// 如果没有传递 latest_time 参数，则默认为当前时间
-	if request.LatestTime == 0 {
-		request.LatestTime = time.Now().Unix()
+	if LatestTime == 0 {
+		LatestTime = time.Now().Unix()
 	}
 
-	// 如果没有传递 token 参数，则默认用户为未登录状态
-	var current_userID, _ = c.Get("user_id")
+	userIDValue, _ := c.Get("user_id")
+	current_userID, _ := userIDValue.(int64)
 
 	var video_ids []int64
 	var videos []models.Video
 
-	// 根据时间戳倒序排序返回最多30个视频
-	result := database.DB.Table("video").Where("create_time < ?", time.Unix(request.LatestTime, 0)).Order("create_time desc").Limit(30).Select("id").Find(&videos)
+	result := database.DB.Table("video").Where("created_at < ?", time.Unix(LatestTime, 0)).Order("created_at desc").Limit(5).Select("id, created_at").Find(&videos)
+
+	// 记录本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
+	// 最后一个id对应的视频的时间戳就是最早的时间
+	// 根据最后一个id去数据库中查找时间戳
+	var next_time int64
+	if len(videos) > 0 {
+		next_time = videos[len(videos)-1].CreatedAt.Unix()
+	} else {
+		next_time = time.Now().Unix()
+	}
+
 	if result.Error != nil {
 		log.Fatal(result.Error)
 	}
+
 	for _, video := range videos {
 		video_ids = append(video_ids, video.VideoID)
 	}
 	// fmt.Println(video_ids)
 
 	//新发布的先刷到，将vid倒叙排列
-	video_ids = reverseList(video_ids)
-	var Videos []Video_feedResp
+	// video_ids = reverseList(video_ids)
+	var Videos []FeedVideoResponse
 	for _, v_id := range video_ids {
-		Videos = append(Videos, Get_Video_for_feed(v_id, int64(current_userID.(int))))
+		Videos = append(Videos, Get_Video_for_feed(v_id, current_userID))
 	}
 
-	response := feedResponse{
-		StatusCode: 0,                 // 成功状态码
-		NextTime:   time.Now().Unix(), // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
-
-		VideoList: Videos, // 视频列表
+	response := FeedResponse{
+		StatusCode: 0,         // 成功状态码
+		StatusMsg:  "success", // 成功状态描述
+		NextTime:   next_time, // 本次返回的视频中，发布最早的时间，作为下次请求时的latest_time
+		VideoList:  Videos,    // 视频列表
 	}
 
 	c.JSON(http.StatusOK, response)
 
 }
 
-func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
+func Get_Video_for_feed(video_id int64, current_userID int64) FeedVideoResponse {
 	var video models.Video
 	result := database.DB.Table("video").Where("id = ?", video_id).Find(&video)
 	if result.Error != nil {
@@ -122,7 +144,7 @@ func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
 		isfar = false
 	}
 	likes, _ := cache.GetVideoLikesFromRedis(video_id)
-	var video_resp = Video_feedResp{
+	var video_resp = FeedVideoResponse{
 		ID:            video_id,
 		Author:        author_resp,
 		PlayURL:       video.PlayURL,
@@ -136,9 +158,9 @@ func Get_Video_for_feed(video_id int64, current_userID int64) Video_feedResp {
 	return video_resp
 }
 
-func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp {
+func Get_author_for_feed(author_id int64, current_userID int64) FeedAuthorResponse {
 
-	var author_resp Author_feedResp
+	var author_resp FeedAuthorResponse
 	var author models.User
 	var relation models.Relation
 	var follow bool
@@ -162,7 +184,7 @@ func Get_author_for_feed(author_id int64, current_userID int64) Author_feedResp 
 	FavoriteCount, _ := cache.GetFavoriteCountFromRedis(author_id)
 	TotalFavorited, _ := cache.GetTotalFavoritedFromRedis(author_id)
 
-	author_resp = Author_feedResp{
+	author_resp = FeedAuthorResponse{
 		ID:              author_id,
 		Name:            author.Name,
 		BackgroundImage: author.BackgroundImage, // 用户个人页顶部大图

@@ -251,6 +251,15 @@ func ChangeVideoLikesCount(db *gorm.DB, tableName string, videoID int64, action 
 
 // 获取点赞列表
 func FavoriteList(ctx *gin.Context) {
+	// 如果ctx中的user_id为-1，则说明未登录，返回空列表
+	if ctx.GetInt64("user_id") == 0 {
+		ctx.JSON(http.StatusOK, FavListResponse{
+			StatusCode: 0, // 成功状态码
+			StatusMsg:  "获取视频成功",
+			VideoList:  []models.VideoFA{},
+		})
+	}
+
 	uID := ctx.Query("user_id")
 	//token := ctx.Query("token")
 	userID, _ := strconv.ParseInt(uID, 10, 64)
