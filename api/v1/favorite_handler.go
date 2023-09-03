@@ -49,6 +49,12 @@ type FavActionParams struct {
 	ActionType int8   `form:"action_type" binding:"required,oneof=1 2"`
 }
 
+// FavoriteListRequest是获取点赞列表请求的结构体
+type FavoriteListRequest struct {
+	Token  string `json:"token"`   // 用户鉴权token
+	UserID string `json:"user_id"` // 用户id
+}
+
 // FavListResponse是获取点赞列表响应的结构体
 type FavListResponse struct {
 	StatusCode int              `json:"status_code"`
@@ -255,9 +261,14 @@ func FavoriteList(ctx *gin.Context) {
 	if ctx.GetInt64("user_id") == 0 {
 		ctx.JSON(http.StatusOK, FavListResponse{
 			StatusCode: 0, // 成功状态码
-			StatusMsg:  "获取视频成功",
+			StatusMsg:  "用户未登录",
 			VideoList:  []models.VideoFA{},
 		})
+	}
+	var request FavoriteListRequest
+	if err := ctx.ShouldBindQuery(&request); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
 	}
 
 	uID := ctx.Query("user_id")
